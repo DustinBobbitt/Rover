@@ -25,7 +25,7 @@ It targets entries in these formats:
 ## Tech Stack
 
 - C#
-- .NET 6 Windows (`net6.0-windows`)
+- .NET 8 Windows (`net8.0-windows`)
 - WinForms
 - No external NuGet dependencies
 
@@ -86,7 +86,7 @@ dotnet publish -c Release -r win-x64 -p:PublishSingleFile=true -p:SelfContained=
 
 Expected output path:
 
-- `bin\Release\net6.0-windows\win-x64\publish\CidToolRenamer.exe`
+- `bin\Release\net8.0-windows\win-x64\publish\CidToolRenamer.exe`
 
 ## Process History / Handoff Notes
 

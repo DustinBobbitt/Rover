@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Drawing;
 using System.IO;
 using System.Text;
 using System.Text.Json;
@@ -18,22 +19,148 @@ namespace CidToolRenamer
         // Match TOOLNAME=<value> or Tool=<value> case-insensitively; group 1 preserves prefix spacing/casing, group 2 is the tool value.
         private static readonly Regex ToolRegex = new(@"(Tool(?:Name)?\s*=\s*)([^\s;,\r\n]+)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
-        // Match T=<number> specifically for ISO files.
-        private static readonly Regex TRegex = new(@"\b(T\s*=\s*)(\d+)\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        // Match T=<number> specifically for G-code style files.
+        private static readonly Regex TEqualsRegex = new(@"\b(T\s*=\s*)(\d+)\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+        // Match compact tool calls like T12 (common in NC/TAP/CNC).
+        private static readonly Regex TCompactRegex = new(@"\b(T)(\d+)\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+        // Heuristic parsing for unknown/variant text formats.
+        private static readonly Regex HeuristicToolNamedRegex = new(@"\b(?:TOOLNAME|TOOL)\s*[:=]\s*([A-Za-z0-9_./\-]{1,32})\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        private static readonly Regex HeuristicToolNumberRegex = new(@"\bT\s*=?\s*(\d{1,4})\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
         public MainForm()
         {
             InitializeComponent();
+            DoubleBuffered = true;
+            TrySetWindowIconFromExecutable();
+            ApplyTheme();
             gridTools.AutoGenerateColumns = false;
             gridTools.DataSource = _toolMappings;
             lblStatus.Text = "Ready";
+        }
+
+        private void TrySetWindowIconFromExecutable()
+        {
+            try
+            {
+                string? path = Application.ExecutablePath;
+                if (string.IsNullOrEmpty(path))
+                {
+                    return;
+                }
+
+                using Icon? extracted = Icon.ExtractAssociatedIcon(path);
+                if (extracted is not null)
+                {
+                    Icon = (Icon)extracted.Clone();
+                }
+            }
+            catch
+            {
+                // Ignore icon failures (e.g., unusual hosting scenarios).
+            }
+        }
+
+        private void ApplyTheme()
+        {
+            // Navy-focused theme to match CAD UI styling while preserving current layout.
+            Color appBg = Color.FromArgb(5, 17, 42);
+            Color panelBg = Color.FromArgb(9, 29, 64);
+            Color panelBgAlt = Color.FromArgb(12, 38, 82);
+            Color buttonBg = Color.FromArgb(22, 66, 130);
+            Color buttonHover = Color.FromArgb(31, 84, 162);
+            Color border = Color.FromArgb(52, 92, 150);
+            Color textPrimary = Color.FromArgb(220, 234, 252);
+            Color textMuted = Color.FromArgb(166, 189, 224);
+            Color gridSelection = Color.FromArgb(59, 120, 204);
+
+            BackColor = appBg;
+            ForeColor = textPrimary;
+            Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point);
+
+            tableLayoutPanel.BackColor = appBg;
+            rootPanel.BackColor = panelBg;
+            optionsPanel.BackColor = panelBg;
+            actionsPanel.BackColor = panelBg;
+            statusPanel.BackColor = panelBgAlt;
+
+            lblRootFolder.ForeColor = textPrimary;
+            lblStatus.ForeColor = textMuted;
+
+            txtRootFolder.BackColor = Color.FromArgb(8, 23, 50);
+            txtRootFolder.ForeColor = textPrimary;
+            txtRootFolder.BorderStyle = BorderStyle.FixedSingle;
+
+            StyleButton(btnBrowseFolder, buttonBg, buttonHover, textPrimary, border);
+            StyleButton(btnScanTools, buttonBg, buttonHover, textPrimary, border);
+            StyleButton(btnLoadMapping, buttonBg, buttonHover, textPrimary, border);
+            StyleButton(btnSaveMapping, buttonBg, buttonHover, textPrimary, border);
+            StyleButton(btnApply, Color.FromArgb(26, 84, 156), Color.FromArgb(34, 99, 182), textPrimary, border);
+
+            // Keep solid backgrounds on checkboxes to avoid WinForms transparency ghosting artifacts.
+            StyleCheckBox(chkIncludeSubfolders, textPrimary, panelBg);
+            StyleCheckBox(chkCreateBackups, textPrimary, panelBg);
+            StyleCheckBox(chkDryRun, textPrimary, panelBg);
+            StyleCheckBox(chkCidFiles, textPrimary, panelBg);
+            StyleCheckBox(chkBppFiles, textPrimary, panelBg);
+            StyleCheckBox(chkIsoFiles, textPrimary, panelBg);
+            lblGCodeExtensions.BackColor = panelBg;
+            lblGCodeExtensions.ForeColor = textMuted;
+
+            // Larger CAD-style action targets.
+            btnBrowseFolder.Size = new Size(96, 27);
+            btnScanTools.Size = new Size(120, 32);
+            btnLoadMapping.Size = new Size(138, 32);
+            btnSaveMapping.Size = new Size(138, 32);
+            btnApply.Size = new Size(140, 32);
+            btnScanTools.Font = new Font("Segoe UI", 10F, FontStyle.Bold, GraphicsUnit.Point);
+            btnLoadMapping.Font = new Font("Segoe UI", 10F, FontStyle.Bold, GraphicsUnit.Point);
+            btnSaveMapping.Font = new Font("Segoe UI", 10F, FontStyle.Bold, GraphicsUnit.Point);
+            btnApply.Font = new Font("Segoe UI", 10F, FontStyle.Bold, GraphicsUnit.Point);
+
+            progressBarFiles.Style = ProgressBarStyle.Continuous;
+
+            gridTools.BackgroundColor = Color.FromArgb(7, 25, 55);
+            gridTools.BorderStyle = BorderStyle.FixedSingle;
+            gridTools.GridColor = Color.FromArgb(37, 73, 125);
+            gridTools.EnableHeadersVisualStyles = false;
+            gridTools.ColumnHeadersDefaultCellStyle.BackColor = Color.FromArgb(17, 48, 96);
+            gridTools.ColumnHeadersDefaultCellStyle.ForeColor = textPrimary;
+            gridTools.ColumnHeadersDefaultCellStyle.SelectionBackColor = Color.FromArgb(17, 48, 96);
+            gridTools.ColumnHeadersDefaultCellStyle.SelectionForeColor = textPrimary;
+            gridTools.ColumnHeadersHeight = 28;
+            gridTools.DefaultCellStyle.BackColor = Color.FromArgb(9, 31, 68);
+            gridTools.DefaultCellStyle.ForeColor = textPrimary;
+            gridTools.DefaultCellStyle.SelectionBackColor = gridSelection;
+            gridTools.DefaultCellStyle.SelectionForeColor = Color.White;
+            gridTools.RowHeadersVisible = false;
+        }
+
+        private static void StyleButton(Button button, Color baseColor, Color hoverColor, Color foreColor, Color borderColor)
+        {
+            button.FlatStyle = FlatStyle.Flat;
+            button.FlatAppearance.BorderSize = 1;
+            button.FlatAppearance.BorderColor = borderColor;
+            button.BackColor = baseColor;
+            button.ForeColor = foreColor;
+            button.UseVisualStyleBackColor = false;
+
+            button.MouseEnter += (_, _) => button.BackColor = hoverColor;
+            button.MouseLeave += (_, _) => button.BackColor = baseColor;
+        }
+
+        private static void StyleCheckBox(CheckBox checkBox, Color foreColor, Color backColor)
+        {
+            checkBox.ForeColor = foreColor;
+            checkBox.BackColor = backColor;
         }
 
         private void btnBrowseFolder_Click(object? sender, EventArgs e)
         {
             using var dialog = new FolderBrowserDialog
             {
-                Description = "Select root folder containing CID or BPP files"
+                Description = "Select root folder containing CID, BPP, or G-code files"
             };
 
             if (Directory.Exists(txtRootFolder.Text))
@@ -60,6 +187,12 @@ namespace CidToolRenamer
 
             var searchOption = chkIncludeSubfolders.Checked ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
             var files = EnumerateTargetFiles(rootFolder, searchOption);
+            if (files.Count == 0)
+            {
+                lblStatus.Text = "No matching files found.";
+                MessageBox.Show(this, "No matching CID, BPP, or G-code files were found in the selected folder.", "Scan Tools", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
             lblStatus.Text = "Scanning tools...";
 
             foreach (var file in files)
@@ -84,21 +217,59 @@ namespace CidToolRenamer
                 }
             }
 
+            if (_toolMappings.Count == 0)
+            {
+                lblStatus.Text = "No tools detected. Manual assist available.";
+                var shouldRetry = MessageBox.Show(
+                    this,
+                    "No tool names were detected automatically.\n\nWould you like to enter one known tool name/number so the app can retry parsing?",
+                    "No tools detected",
+                    MessageBoxButtons.YesNo,
+                    MessageBoxIcon.Question);
+
+                if (shouldRetry == DialogResult.Yes)
+                {
+                    string? knownTool = PromptForKnownTool();
+                    if (!string.IsNullOrWhiteSpace(knownTool))
+                    {
+                        RecoverToolsUsingKnownTool(files, knownTool.Trim());
+                    }
+                }
+
+                if (_toolMappings.Count == 0)
+                {
+                    lblStatus.Text = "No tools detected after assisted retry.";
+                    if (PromptToShareUnsupportedSample())
+                    {
+                        MessageBox.Show(
+                            this,
+                            "Thanks. Please share one representative file with the team so we can add support for this format in a future update.",
+                            "Sample file requested",
+                            MessageBoxButtons.OK,
+                            MessageBoxIcon.Information);
+                    }
+                    ShowErrorsIfAny();
+                    return;
+                }
+            }
+
             lblStatus.Text = $"Found {_toolMappings.Count} unique tools.";
             ShowErrorsIfAny();
         }
 
-        private IEnumerable<string> ExtractToolsFromFile(string file)
+        private IEnumerable<string> ExtractToolsFromFile(string file, string? knownToolHint = null)
         {
-            string extension = Path.GetExtension(file).ToLower();
+            string extension = Path.GetExtension(file).ToLowerInvariant();
             string? text = TryReadText(file);
-            if (text == null) yield break;
+            if (text == null) return Array.Empty<string>();
+
+            var tools = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
             if (extension == ".cid")
             {
                 foreach (Match match in ToolRegex.Matches(text))
                 {
-                    yield return match.Groups[2].Value.Trim();
+                    AddToolToken(tools, match.Groups[2].Value);
                 }
             }
             else if (extension == ".bpp")
@@ -108,27 +279,47 @@ namespace CidToolRenamer
                 while ((line = reader.ReadLine()) != null)
                 {
                     int targetIndex = GetBppToolIndex(line);
-                    if (targetIndex != -1)
+                    if (targetIndex == -1)
                     {
-                        var colonIdx = line.IndexOf(':');
-                        if (colonIdx != -1)
-                        {
-                            var fields = SplitBppFields(line.Substring(colonIdx + 1));
-                            if (fields.Count > targetIndex)
-                            {
-                                yield return fields[targetIndex].Trim().Trim('"');
-                            }
-                        }
+                        continue;
+                    }
+
+                    var colonIdx = line.IndexOf(':');
+                    if (colonIdx == -1)
+                    {
+                        continue;
+                    }
+
+                    var fields = SplitBppFields(line.Substring(colonIdx + 1));
+                    if (fields.Count > targetIndex)
+                    {
+                        AddToolToken(tools, fields[targetIndex].Trim().Trim('"'));
                     }
                 }
             }
-            else if (extension == ".iso")
+            else if (IsGCodeExtension(extension))
             {
-                foreach (Match match in TRegex.Matches(text))
+                foreach (Match match in TEqualsRegex.Matches(text))
                 {
-                    yield return match.Groups[2].Value;
+                    AddToolToken(tools, match.Groups[2].Value);
+                }
+
+                foreach (Match match in TCompactRegex.Matches(text))
+                {
+                    AddToolToken(tools, match.Groups[2].Value);
                 }
             }
+
+            // If strict parsing found nothing, fall back to a broad best-effort extractor.
+            if (tools.Count == 0)
+            {
+                foreach (string token in ExtractToolsWithCommonSense(text, knownToolHint))
+                {
+                    AddToolToken(tools, token);
+                }
+            }
+
+            return tools;
         }
 
         private void btnSaveMapping_Click(object? sender, EventArgs e)
@@ -213,7 +404,7 @@ namespace CidToolRenamer
             }
 
             var confirm = MessageBox.Show(this,
-                "This will process CID, BPP, and ISO files and apply tool replacements (unless Dry Run is checked). Continue?",
+                "This will process CID, BPP, and G-code files and apply tool replacements (unless Dry Run is checked). Continue?",
                 "Confirm",
                 MessageBoxButtons.YesNo,
                 MessageBoxIcon.Warning);
@@ -226,6 +417,12 @@ namespace CidToolRenamer
             _errorLog.Clear();
             var searchOption = chkIncludeSubfolders.Checked ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
             var files = EnumerateTargetFiles(rootFolder, searchOption);
+            if (files.Count == 0)
+            {
+                lblStatus.Text = "No matching files found.";
+                MessageBox.Show(this, "No matching CID, BPP, or G-code files were found in the selected folder.", "Apply Mapping", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
             var fileList = new List<string>(files);
 
             progressBarFiles.Minimum = 0;
@@ -298,28 +495,207 @@ namespace CidToolRenamer
                 string lineEnding = content.Contains("\r\n") ? "\r\n" : (content.Contains("\n") ? "\n" : Environment.NewLine);
                 return string.Join(lineEnding, lines);
             }
-            else if (extension == ".iso")
+            else if (IsGCodeExtension(extension))
             {
-                return TRegex.Replace(content, match =>
-                {
-                    string prefix = match.Groups[1].Value;
-                    string oldTool = match.Groups[2].Value;
-                    if (mapping.TryGetValue(oldTool, out var mapped))
-                    {
-                        // Handle formatting: preserve padding length if target tool number is numeric
-                        if (int.TryParse(oldTool, out _) && int.TryParse(mapped, out _))
-                        {
-                            int oldLen = oldTool.Length;
-                            string padded = mapped.PadLeft(oldLen, '0');
-                            // If the new number is longer than the old one, PadLeft doesn't truncate, which is correct (1 -> 10 becomes 10, not 0)
-                            return prefix + padded;
-                        }
-                        return prefix + mapped;
-                    }
-                    return match.Value;
-                });
+                string updated = TEqualsRegex.Replace(content, match => ReplaceGCodeToolMatch(match, mapping));
+                updated = TCompactRegex.Replace(updated, match => ReplaceGCodeToolMatch(match, mapping));
+                return updated;
             }
             return content;
+        }
+
+        private static string ReplaceGCodeToolMatch(Match match, Dictionary<string, string> mapping)
+        {
+            string prefix = match.Groups[1].Value;
+            string oldTool = match.Groups[2].Value;
+
+            if (mapping.TryGetValue(oldTool, out var mapped))
+            {
+                return prefix + PreserveNumericPadding(oldTool, mapped);
+            }
+
+            // Allow imported mappings that use keys like "T12" for G-code.
+            if (mapping.TryGetValue(prefix + oldTool, out mapped))
+            {
+                return prefix + PreserveNumericPadding(oldTool, mapped);
+            }
+
+            return match.Value;
+        }
+
+        private static string PreserveNumericPadding(string oldTool, string mapped)
+        {
+            if (int.TryParse(oldTool, out _) && int.TryParse(mapped, out _))
+            {
+                int oldLen = oldTool.Length;
+                // If mapped is longer, PadLeft keeps full value (no truncation).
+                return mapped.PadLeft(oldLen, '0');
+            }
+
+            return mapped;
+        }
+
+        private static void AddToolToken(HashSet<string> tools, string? token)
+        {
+            if (string.IsNullOrWhiteSpace(token))
+            {
+                return;
+            }
+
+            string trimmed = token.Trim().Trim('"', '\'');
+            if (trimmed.Length == 0)
+            {
+                return;
+            }
+
+            tools.Add(trimmed);
+        }
+
+        private static IEnumerable<string> ExtractToolsWithCommonSense(string text, string? knownToolHint)
+        {
+            var tools = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (Match match in HeuristicToolNamedRegex.Matches(text))
+            {
+                AddToolToken(tools, match.Groups[1].Value);
+            }
+
+            foreach (Match match in HeuristicToolNumberRegex.Matches(text))
+            {
+                AddToolToken(tools, match.Groups[1].Value);
+            }
+
+            if (!string.IsNullOrWhiteSpace(knownToolHint))
+            {
+                string rawHint = knownToolHint.Trim();
+                string normalizedHint = rawHint.Trim().Trim('"', '\'');
+                if (normalizedHint.Length > 0)
+                {
+                    AddToolToken(tools, normalizedHint);
+
+                    var exactBoundary = new Regex($@"(?<![A-Za-z0-9_./\-]){Regex.Escape(normalizedHint)}(?![A-Za-z0-9_./\-])", RegexOptions.IgnoreCase);
+                    if (exactBoundary.IsMatch(text))
+                    {
+                        AddToolToken(tools, normalizedHint);
+                    }
+                }
+            }
+
+            return tools;
+        }
+
+        private string? PromptForKnownTool()
+        {
+            using var dialog = new Form();
+            dialog.Text = "Assist parser";
+            dialog.FormBorderStyle = FormBorderStyle.FixedDialog;
+            dialog.StartPosition = FormStartPosition.CenterParent;
+            dialog.MaximizeBox = false;
+            dialog.MinimizeBox = false;
+            dialog.ShowInTaskbar = false;
+            dialog.ClientSize = new System.Drawing.Size(420, 130);
+
+            var lbl = new Label
+            {
+                AutoSize = true,
+                Location = new System.Drawing.Point(12, 12),
+                Text = "Enter one known tool name/number (example: 12, T12, T05):"
+            };
+
+            var txt = new TextBox
+            {
+                Location = new System.Drawing.Point(12, 38),
+                Width = 390
+            };
+
+            var btnOk = new Button
+            {
+                Text = "Retry",
+                DialogResult = DialogResult.OK,
+                Location = new System.Drawing.Point(246, 82),
+                Width = 75
+            };
+
+            var btnCancel = new Button
+            {
+                Text = "Cancel",
+                DialogResult = DialogResult.Cancel,
+                Location = new System.Drawing.Point(327, 82),
+                Width = 75
+            };
+
+            dialog.Controls.Add(lbl);
+            dialog.Controls.Add(txt);
+            dialog.Controls.Add(btnOk);
+            dialog.Controls.Add(btnCancel);
+            dialog.AcceptButton = btnOk;
+            dialog.CancelButton = btnCancel;
+
+            return dialog.ShowDialog(this) == DialogResult.OK ? txt.Text : null;
+        }
+
+        private void RecoverToolsUsingKnownTool(List<string> files, string knownTool)
+        {
+            foreach (var file in files)
+            {
+                foreach (var toolName in ExtractToolsFromFile(file, knownTool))
+                {
+                    if (_mappingByOldName.ContainsKey(toolName))
+                    {
+                        continue;
+                    }
+
+                    var entry = new ToolMappingEntry
+                    {
+                        OldName = toolName,
+                        NewName = toolName
+                    };
+                    _mappingByOldName[toolName] = entry;
+                    _toolMappings.Add(entry);
+                }
+            }
+        }
+
+        private bool PromptToShareUnsupportedSample()
+        {
+            using var dialog = new Form();
+            dialog.Text = "Help improve format support";
+            dialog.FormBorderStyle = FormBorderStyle.FixedDialog;
+            dialog.StartPosition = FormStartPosition.CenterParent;
+            dialog.MaximizeBox = false;
+            dialog.MinimizeBox = false;
+            dialog.ShowInTaskbar = false;
+            dialog.ClientSize = new System.Drawing.Size(460, 160);
+
+            var lbl = new Label
+            {
+                AutoSize = false,
+                Location = new System.Drawing.Point(12, 12),
+                Size = new System.Drawing.Size(436, 52),
+                Text = "Parsing still could not identify tools.\r\nIf you can share a representative file, we can improve support in a future update."
+            };
+
+            var chkShare = new CheckBox
+            {
+                AutoSize = true,
+                Location = new System.Drawing.Point(15, 74),
+                Text = "I can share a sample file to improve future support."
+            };
+
+            var btnOk = new Button
+            {
+                Text = "Continue",
+                DialogResult = DialogResult.OK,
+                Location = new System.Drawing.Point(373, 120),
+                Width = 75
+            };
+
+            dialog.Controls.Add(lbl);
+            dialog.Controls.Add(chkShare);
+            dialog.Controls.Add(btnOk);
+            dialog.AcceptButton = btnOk;
+
+            return dialog.ShowDialog(this) == DialogResult.OK && chkShare.Checked;
         }
 
         private string ProcessBppLine(string line, Dictionary<string, string> mapping)
@@ -391,6 +767,18 @@ namespace CidToolRenamer
             return fields;
         }
 
+        private static bool IsGCodeExtension(string extension)
+        {
+            return extension == ".iso" ||
+                   extension == ".tap" ||
+                   extension == ".nc" ||
+                   extension == ".cnc" ||
+                   extension == ".mpf" ||
+                   extension == ".spf" ||
+                   extension == ".ngc" ||
+                   extension == ".gcode";
+        }
+
         private bool ValidateRootFolder(out string rootFolder)
         {
             rootFolder = txtRootFolder.Text.Trim();
@@ -402,28 +790,43 @@ namespace CidToolRenamer
             return true;
         }
 
-        private IEnumerable<string> EnumerateTargetFiles(string rootFolder, SearchOption searchOption)
+        private List<string> EnumerateTargetFiles(string rootFolder, SearchOption searchOption)
         {
+            var files = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             try
             {
-                IEnumerable<string> files = Array.Empty<string>();
                 if (chkCidFiles.Checked)
                 {
-                    files = files.Concat(Directory.EnumerateFiles(rootFolder, "*.cid", searchOption));
+                    AddFiles(files, rootFolder, "*.cid", searchOption);
                 }
                 if (chkBppFiles.Checked)
                 {
-                    files = files.Concat(Directory.EnumerateFiles(rootFolder, "*.bpp", searchOption));
+                    AddFiles(files, rootFolder, "*.bpp", searchOption);
                 }
                 if (chkIsoFiles.Checked)
                 {
-                    files = files.Concat(Directory.EnumerateFiles(rootFolder, "*.iso", searchOption));
+                    AddFiles(files, rootFolder, "*.iso", searchOption);
+                    AddFiles(files, rootFolder, "*.tap", searchOption);
+                    AddFiles(files, rootFolder, "*.nc", searchOption);
+                    AddFiles(files, rootFolder, "*.cnc", searchOption);
+                    AddFiles(files, rootFolder, "*.mpf", searchOption);
+                    AddFiles(files, rootFolder, "*.spf", searchOption);
+                    AddFiles(files, rootFolder, "*.ngc", searchOption);
+                    AddFiles(files, rootFolder, "*.gcode", searchOption);
                 }
-                return files;
+                return files.ToList();
             }
             catch
             {
-                return Array.Empty<string>();
+                return new List<string>();
+            }
+        }
+
+        private static void AddFiles(HashSet<string> files, string rootFolder, string searchPattern, SearchOption searchOption)
+        {
+            foreach (var file in Directory.GetFiles(rootFolder, searchPattern, searchOption))
+            {
+                files.Add(file);
             }
         }
 

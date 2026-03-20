@@ -16,6 +16,7 @@ namespace CidToolRenamer
         private CheckBox chkCidFiles;
         private CheckBox chkBppFiles;
         private CheckBox chkIsoFiles;
+        private Label lblGCodeExtensions;
         private Button btnScanTools;
         private Button btnLoadMapping;
         private Button btnSaveMapping;
@@ -54,6 +55,8 @@ namespace CidToolRenamer
             chkDryRun = new CheckBox();
             chkCidFiles = new CheckBox();
             chkBppFiles = new CheckBox();
+            chkIsoFiles = new CheckBox();
+            lblGCodeExtensions = new Label();
             actionsPanel = new FlowLayoutPanel();
             btnScanTools = new Button();
             btnLoadMapping = new Button();
@@ -142,6 +145,7 @@ namespace CidToolRenamer
             optionsPanel.Controls.Add(chkCidFiles);
             optionsPanel.Controls.Add(chkBppFiles);
             optionsPanel.Controls.Add(chkIsoFiles);
+            optionsPanel.Controls.Add(lblGCodeExtensions);
             optionsPanel.Dock = DockStyle.Fill;
             optionsPanel.Location = new System.Drawing.Point(3, 43);
             optionsPanel.Name = "optionsPanel";
@@ -213,10 +217,21 @@ namespace CidToolRenamer
             chkIsoFiles.CheckState = CheckState.Checked;
             chkIsoFiles.Location = new System.Drawing.Point(587, 3);
             chkIsoFiles.Name = "chkIsoFiles";
-            chkIsoFiles.Size = new System.Drawing.Size(75, 19);
+            chkIsoFiles.Size = new System.Drawing.Size(65, 19);
             chkIsoFiles.TabIndex = 5;
-            chkIsoFiles.Text = ".ISO/TAP files";
+            chkIsoFiles.Text = "G-code";
             chkIsoFiles.UseVisualStyleBackColor = true;
+            // 
+            // lblGCodeExtensions
+            // 
+            lblGCodeExtensions.Anchor = AnchorStyles.Left;
+            lblGCodeExtensions.AutoSize = true;
+            lblGCodeExtensions.ForeColor = SystemColors.GrayText;
+            lblGCodeExtensions.Location = new System.Drawing.Point(658, 4);
+            lblGCodeExtensions.Name = "lblGCodeExtensions";
+            lblGCodeExtensions.Size = new System.Drawing.Size(191, 15);
+            lblGCodeExtensions.TabIndex = 6;
+            lblGCodeExtensions.Text = "(.tap, .iso, .nc, .cnc, .mpf, .spf, .ngc, .gcode)";
             // 
             // actionsPanel
             // 

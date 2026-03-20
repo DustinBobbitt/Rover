@@ -1,9 +1,12 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <TargetFramework>net6.0-windows</TargetFramework>
+    <TargetFramework>net8.0-windows</TargetFramework>
     <UseWindowsForms>true</UseWindowsForms>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <ApplicationIcon>Resources\app.ico</ApplicationIcon>
+    <!-- Prevent SDK default globs from compiling helper/temp projects left under this folder -->
+    <DefaultItemExcludes>$(DefaultItemExcludes);SmokeHarness\**\*;Tools\**\*</DefaultItemExcludes>
   </PropertyGroup>
 </Project>
