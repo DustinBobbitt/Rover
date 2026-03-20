@@ -15,8 +15,11 @@ namespace CidToolRenamer
         private readonly Dictionary<string, ToolMappingEntry> _mappingByOldName = new();
         private readonly List<string> _errorLog = new();
 
-        // Match TOOLNAME=<value> case-insensitively; group 1 preserves prefix spacing/casing, group 2 is the tool value.
-        private static readonly Regex ToolRegex = new(@"(ToolName\s*=\s*)([^\s;,\r\n]+)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        // Match TOOLNAME=<value> or Tool=<value> case-insensitively; group 1 preserves prefix spacing/casing, group 2 is the tool value.
+        private static readonly Regex ToolRegex = new(@"(Tool(?:Name)?\s*=\s*)([^\s;,\r\n]+)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+        // Match T=<number> specifically for ISO files.
+        private static readonly Regex TRegex = new(@"\b(T\s*=\s*)(\d+)\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
         public MainForm()
         {
@@ -30,7 +33,7 @@ namespace CidToolRenamer
         {
             using var dialog = new FolderBrowserDialog
             {
-                Description = "Select root folder containing CID files"
+                Description = "Select root folder containing CID or BPP files"
             };
 
             if (Directory.Exists(txtRootFolder.Text))
@@ -56,20 +59,13 @@ namespace CidToolRenamer
             _errorLog.Clear();
 
             var searchOption = chkIncludeSubfolders.Checked ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
-            var files = EnumerateCidFiles(rootFolder, searchOption);
+            var files = EnumerateTargetFiles(rootFolder, searchOption);
             lblStatus.Text = "Scanning tools...";
 
             foreach (var file in files)
             {
-                string? text = TryReadText(file);
-                if (text is null)
+                foreach (var toolName in ExtractToolsFromFile(file))
                 {
-                    continue;
-                }
-
-                foreach (Match match in ToolRegex.Matches(text))
-                {
-                    var toolName = match.Groups[2].Value.Trim();
                     if (string.IsNullOrEmpty(toolName))
                     {
                         continue;
@@ -90,6 +86,49 @@ namespace CidToolRenamer
 
             lblStatus.Text = $"Found {_toolMappings.Count} unique tools.";
             ShowErrorsIfAny();
+        }
+
+        private IEnumerable<string> ExtractToolsFromFile(string file)
+        {
+            string extension = Path.GetExtension(file).ToLower();
+            string? text = TryReadText(file);
+            if (text == null) yield break;
+
+            if (extension == ".cid")
+            {
+                foreach (Match match in ToolRegex.Matches(text))
+                {
+                    yield return match.Groups[2].Value.Trim();
+                }
+            }
+            else if (extension == ".bpp")
+            {
+                using var reader = new StringReader(text);
+                string? line;
+                while ((line = reader.ReadLine()) != null)
+                {
+                    int targetIndex = GetBppToolIndex(line);
+                    if (targetIndex != -1)
+                    {
+                        var colonIdx = line.IndexOf(':');
+                        if (colonIdx != -1)
+                        {
+                            var fields = SplitBppFields(line.Substring(colonIdx + 1));
+                            if (fields.Count > targetIndex)
+                            {
+                                yield return fields[targetIndex].Trim().Trim('"');
+                            }
+                        }
+                    }
+                }
+            }
+            else if (extension == ".iso")
+            {
+                foreach (Match match in TRegex.Matches(text))
+                {
+                    yield return match.Groups[2].Value;
+                }
+            }
         }
 
         private void btnSaveMapping_Click(object? sender, EventArgs e)
@@ -174,7 +213,7 @@ namespace CidToolRenamer
             }
 
             var confirm = MessageBox.Show(this,
-                "This will process CID files and change Tool= entries (unless Dry Run is checked). Continue?",
+                "This will process CID, BPP, and ISO files and apply tool replacements (unless Dry Run is checked). Continue?",
                 "Confirm",
                 MessageBoxButtons.YesNo,
                 MessageBoxIcon.Warning);
@@ -186,7 +225,7 @@ namespace CidToolRenamer
 
             _errorLog.Clear();
             var searchOption = chkIncludeSubfolders.Checked ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
-            var files = EnumerateCidFiles(rootFolder, searchOption);
+            var files = EnumerateTargetFiles(rootFolder, searchOption);
             var fileList = new List<string>(files);
 
             progressBarFiles.Minimum = 0;
@@ -216,16 +255,7 @@ namespace CidToolRenamer
                     TryCreateBackup(file);
                 }
 
-                string newText = ToolRegex.Replace(originalText, match =>
-                {
-                    string prefix = match.Groups[1].Value;
-                    string oldTool = match.Groups[2].Value;
-                    if (mappingOldToNew.TryGetValue(oldTool, out var mapped))
-                    {
-                        return prefix + mapped;
-                    }
-                    return match.Value;
-                });
+                string newText = ProcessFileContent(file, originalText, mappingOldToNew);
 
                 if (!string.Equals(originalText, newText, StringComparison.Ordinal))
                 {
@@ -241,6 +271,126 @@ namespace CidToolRenamer
             ShowErrorsIfAny();
         }
 
+        private string ProcessFileContent(string file, string content, Dictionary<string, string> mapping)
+        {
+            string extension = Path.GetExtension(file).ToLower();
+            if (extension == ".cid")
+            {
+                return ToolRegex.Replace(content, match =>
+                {
+                    string prefix = match.Groups[1].Value;
+                    string oldTool = match.Groups[2].Value;
+                    if (mapping.TryGetValue(oldTool, out var mapped))
+                    {
+                        return prefix + mapped;
+                    }
+                    return match.Value;
+                });
+            }
+            else if (extension == ".bpp")
+            {
+                var lines = content.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);
+                for (int i = 0; i < lines.Length; i++)
+                {
+                    lines[i] = ProcessBppLine(lines[i], mapping);
+                }
+                // Determine original line ending by checking content
+                string lineEnding = content.Contains("\r\n") ? "\r\n" : (content.Contains("\n") ? "\n" : Environment.NewLine);
+                return string.Join(lineEnding, lines);
+            }
+            else if (extension == ".iso")
+            {
+                return TRegex.Replace(content, match =>
+                {
+                    string prefix = match.Groups[1].Value;
+                    string oldTool = match.Groups[2].Value;
+                    if (mapping.TryGetValue(oldTool, out var mapped))
+                    {
+                        // Handle formatting: preserve padding length if target tool number is numeric
+                        if (int.TryParse(oldTool, out _) && int.TryParse(mapped, out _))
+                        {
+                            int oldLen = oldTool.Length;
+                            string padded = mapped.PadLeft(oldLen, '0');
+                            // If the new number is longer than the old one, PadLeft doesn't truncate, which is correct (1 -> 10 becomes 10, not 0)
+                            return prefix + padded;
+                        }
+                        return prefix + mapped;
+                    }
+                    return match.Value;
+                });
+            }
+            return content;
+        }
+
+        private string ProcessBppLine(string line, Dictionary<string, string> mapping)
+        {
+            int colonIdx = line.IndexOf(':');
+            if (colonIdx == -1) return line;
+
+            int targetIndex = GetBppToolIndex(line);
+            if (targetIndex == -1) return line;
+
+            string prefix = line.Substring(0, colonIdx + 1);
+            string payload = line.Substring(colonIdx + 1);
+
+            var fields = SplitBppFields(payload);
+            if (fields.Count <= targetIndex) return line;
+
+            string toolValue = fields[targetIndex].Trim().Trim('"');
+            if (mapping.TryGetValue(toolValue, out string? newValue))
+            {
+                fields[targetIndex] = $" \"{newValue}\""; // Preserve space before quote if it was there, or just add one for readability
+                // But let's be more precise and preserve the exact spacing if possible
+                string originalField = fields[targetIndex];
+                string leadingSpace = originalField.Substring(0, originalField.Length - originalField.TrimStart().Length);
+                fields[targetIndex] = $"{leadingSpace}\"{newValue}\"";
+                
+                return prefix + string.Join(",", fields);
+            }
+
+            return line;
+        }
+
+        private int GetBppToolIndex(string line)
+        {
+            int colonIdx = line.IndexOf(':');
+            if (colonIdx == -1) return -1;
+            
+            string prefix = line.Substring(0, colonIdx);
+            // Must contain BG or ROUTG and not be a comment unless it's a ROUTG comment as per CDI
+            bool isComment = prefix.TrimStart().StartsWith("'");
+            string normalizedPrefix = prefix.ToUpperInvariant();
+
+            if (normalizedPrefix.Contains("BG") && !isComment) return 35;
+            if (normalizedPrefix.Contains("ROUTG")) return 49; // ROUTG can be commented as per CDI
+
+            return -1;
+        }
+
+        private List<string> SplitBppFields(string payload)
+        {
+            List<string> fields = new List<string>();
+            bool inQuotes = false;
+            StringBuilder currentField = new StringBuilder();
+
+            for (int i = 0; i < payload.Length; i++)
+            {
+                char c = payload[i];
+                if (c == '\"') inQuotes = !inQuotes;
+                if (c == ',' && !inQuotes)
+                {
+                    fields.Add(currentField.ToString());
+                    currentField.Clear();
+                }
+                else
+                {
+                    currentField.Append(c);
+                }
+            }
+            fields.Add(currentField.ToString());
+            return fields;
+        }
+
         private bool ValidateRootFolder(out string rootFolder)
         {
             rootFolder = txtRootFolder.Text.Trim();
@@ -252,11 +402,24 @@ namespace CidToolRenamer
             return true;
         }
 
-        private static IEnumerable<string> EnumerateCidFiles(string rootFolder, SearchOption searchOption)
+        private IEnumerable<string> EnumerateTargetFiles(string rootFolder, SearchOption searchOption)
         {
             try
             {
-                return Directory.EnumerateFiles(rootFolder, "*.cid", searchOption);
+                IEnumerable<string> files = Array.Empty<string>();
+                if (chkCidFiles.Checked)
+                {
+                    files = files.Concat(Directory.EnumerateFiles(rootFolder, "*.cid", searchOption));
+                }
+                if (chkBppFiles.Checked)
+                {
+                    files = files.Concat(Directory.EnumerateFiles(rootFolder, "*.bpp", searchOption));
+                }
+                if (chkIsoFiles.Checked)
+                {
+                    files = files.Concat(Directory.EnumerateFiles(rootFolder, "*.iso", searchOption));
+                }
+                return files;
             }
             catch
             {

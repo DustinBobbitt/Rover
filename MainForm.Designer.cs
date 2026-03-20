@@ -13,6 +13,9 @@ namespace CidToolRenamer
         private CheckBox chkIncludeSubfolders;
         private CheckBox chkCreateBackups;
         private CheckBox chkDryRun;
+        private CheckBox chkCidFiles;
+        private CheckBox chkBppFiles;
+        private CheckBox chkIsoFiles;
         private Button btnScanTools;
         private Button btnLoadMapping;
         private Button btnSaveMapping;
@@ -49,6 +52,8 @@ namespace CidToolRenamer
             chkIncludeSubfolders = new CheckBox();
             chkCreateBackups = new CheckBox();
             chkDryRun = new CheckBox();
+            chkCidFiles = new CheckBox();
+            chkBppFiles = new CheckBox();
             actionsPanel = new FlowLayoutPanel();
             btnScanTools = new Button();
             btnLoadMapping = new Button();
@@ -134,6 +139,9 @@ namespace CidToolRenamer
             optionsPanel.Controls.Add(chkIncludeSubfolders);
             optionsPanel.Controls.Add(chkCreateBackups);
             optionsPanel.Controls.Add(chkDryRun);
+            optionsPanel.Controls.Add(chkCidFiles);
+            optionsPanel.Controls.Add(chkBppFiles);
+            optionsPanel.Controls.Add(chkIsoFiles);
             optionsPanel.Dock = DockStyle.Fill;
             optionsPanel.Location = new System.Drawing.Point(3, 43);
             optionsPanel.Name = "optionsPanel";
@@ -173,6 +181,42 @@ namespace CidToolRenamer
             chkDryRun.TabIndex = 2;
             chkDryRun.Text = "Dry run (don’t write)";
             chkDryRun.UseVisualStyleBackColor = true;
+            // 
+            // chkCidFiles
+            // 
+            chkCidFiles.AutoSize = true;
+            chkCidFiles.Checked = true;
+            chkCidFiles.CheckState = CheckState.Checked;
+            chkCidFiles.Location = new System.Drawing.Point(427, 3);
+            chkCidFiles.Name = "chkCidFiles";
+            chkCidFiles.Size = new System.Drawing.Size(73, 19);
+            chkCidFiles.TabIndex = 3;
+            chkCidFiles.Text = ".CID files";
+            chkCidFiles.UseVisualStyleBackColor = true;
+            // 
+            // chkBppFiles
+            // 
+            chkBppFiles.AutoSize = true;
+            chkBppFiles.Checked = true;
+            chkBppFiles.CheckState = CheckState.Checked;
+            chkBppFiles.Location = new System.Drawing.Point(506, 3);
+            chkBppFiles.Name = "chkBppFiles";
+            chkBppFiles.Size = new System.Drawing.Size(75, 19);
+            chkBppFiles.TabIndex = 4;
+            chkBppFiles.Text = ".BPP files";
+            chkBppFiles.UseVisualStyleBackColor = true;
+            // 
+            // chkIsoFiles
+            // 
+            chkIsoFiles.AutoSize = true;
+            chkIsoFiles.Checked = true;
+            chkIsoFiles.CheckState = CheckState.Checked;
+            chkIsoFiles.Location = new System.Drawing.Point(587, 3);
+            chkIsoFiles.Name = "chkIsoFiles";
+            chkIsoFiles.Size = new System.Drawing.Size(75, 19);
+            chkIsoFiles.TabIndex = 5;
+            chkIsoFiles.Text = ".ISO/TAP files";
+            chkIsoFiles.UseVisualStyleBackColor = true;
             // 
             // actionsPanel
             // 
@@ -291,7 +335,7 @@ namespace CidToolRenamer
             ClientSize = new System.Drawing.Size(884, 561);
             Controls.Add(tableLayoutPanel);
             Name = "MainForm";
-            Text = "CID Tool Renamer";
+            Text = "CID & BPP Tool Renamer";
             tableLayoutPanel.ResumeLayout(false);
             tableLayoutPanel.PerformLayout();
             rootPanel.ResumeLayout(false);
