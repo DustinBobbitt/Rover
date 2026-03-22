@@ -183,7 +183,7 @@ namespace CidToolRenamer
             chkDryRun.Name = "chkDryRun";
             chkDryRun.Size = new System.Drawing.Size(140, 19);
             chkDryRun.TabIndex = 2;
-            chkDryRun.Text = "Dry run (don’t write)";
+            chkDryRun.Text = "Dry run (do not write)";
             chkDryRun.UseVisualStyleBackColor = true;
             // 
             // chkCidFiles
@@ -350,7 +350,7 @@ namespace CidToolRenamer
             ClientSize = new System.Drawing.Size(884, 561);
             Controls.Add(tableLayoutPanel);
             Name = "MainForm";
-            Text = "CID & BPP Tool Renamer";
+            Text = "Rover - CID, BPP & G-code tool renamer";
             tableLayoutPanel.ResumeLayout(false);
             tableLayoutPanel.PerformLayout();
             rootPanel.ResumeLayout(false);

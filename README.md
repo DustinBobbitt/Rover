@@ -1,111 +1,77 @@
-# CID & BPP Tool Renamer
+# Rover
 
-Desktop WinForms utility for scanning `.cid` and `.bpp` files, mapping tool names, and applying replacements in bulk.
+Windows desktop utility for **bulk tool remapping** in **Biesse-style `.cid` / `.bpp`** files and common **G-code** outputs. Scan a folder, edit an old-to-new mapping table, then apply (optionally with **dry run** and **`.bak` backups**).
 
-## Current Purpose
+**Repository note:** The .NET project and build output use the assembly name `CidToolRenamer` (executable `CidToolRenamer.exe`). **Rover** is the product name used here and in the app window title.
 
-This project helps migrate CID/CAM and BPP files between machines that use different tool naming conventions.
+## Who it is for
 
-It targets entries in these formats:
+- Shops moving programs between setups or posts where **tool names or T/H/D numbers** need to line up with a new convention.
+- Anyone who prefers a **small offline tool** over hand-editing hundreds of CAM or NC files.
 
-### CID Files
-- `TOOLNAME=9/16END`
-- `ToolName = T05`
-- `Tool = T05`
-- Case-insensitive on `ToolName` / `Tool`
-- The value after `=` is parsed as the tool token.
+## Supported file types
 
-### BPP Files (Index-Based)
-- Processes lines starting with `@ BG`, `@ ROUTG`, or `' ROUTG`.
-- Uses fixed field indices for safe replacement:
-  - **BG**: Tool is at index **35** (after `:`)
-  - **ROUTG**: Tool is at index **49** (after `:`)
-- Replacements preserve CSV structure and quotes.
+| Area | Extensions | Behavior summary |
+|------|------------|------------------|
+| CID | `.cid` | `TOOLNAME=` / `ToolName=` / `Tool=` (case-insensitive); value token is remapped. |
+| BPP | `.bpp` | Lines with `@ BG`, `@ ROUTG`, or `' ROUTG`; tool field at fixed indices (BG: 35, ROUTG: 49 after `:`). |
+| G-code | `.tap`, `.iso`, `.nc`, `.cnc`, `.mpf`, `.spf`, `.ngc`, `.gcode` | `T` / `H` / `D` when the **numeric token** matches a mapping key (including `T=` / `H=` / `D=`, compact forms, and fused `G43H` / `G41D` / `G42D`). |
 
-## Tech Stack
+## Safe workflow (use these)
 
-- C#
-- .NET 8 Windows (`net8.0-windows`)
-- WinForms
-- No external NuGet dependencies
+- **Dry run** - Reports what would change without writing files.
+- **Create .bak backups** - Copies each file to `filename.ext.bak` before overwrite (skipped in dry run).
+- **Confirm apply** - Final yes/no before processing; extra **machine safety** text appears when G-code is enabled.
+- **JSON mapping** - Save/load mappings to repeat the same rename set.
 
-## Implemented Features
+## Machine safety (G-code)
 
-- Browse/select a root folder
-- Optional recursive scan (`Include subfolders`)
-- Scan `.cid` and `.bpp` files to collect unique tool names
-- Editable Old Name -> New Name mapping grid
-- Save mappings to JSON
-- Load mappings from JSON (merge existing + new keys)
-- Apply mappings across all discovered files
-- Optional `.bak` backup creation
-- Optional dry run mode (count changes without writing files)
-- Progress bar and status text during processing
-- Basic error aggregation (read/write/copy errors shown at completion)
+Rover only edits text. If **`H`** (length offset / `G43`) or **`D`** (cutter comp) no longer matches the **control offset page**, the program can run with **wrong Z** or comp. That can cause **tool breakage**, **damage to spoil boards or fixtures**, or **machine limits** - physical motion, not an app crash.
 
-## Parser/Replacement Details
+Before running edited G-code on a machine: **backups**, **dry run**, verify in **CAM or simulation**, check **offsets on the control**, and **prove out** before production.
 
-### CID Parser
-- Regex: `@"(Tool(?:Name)?\s*=\s*)([^\s;,\r\n]+)"`
-- Group 1 preserves prefix, Group 2 is the tool value.
+## Text encoding
 
-### BPP Parser
-- Splits fields using CSV-style parsing (respecting quotes).
-- Targets specific indices per operation type (`BG`: 35, `ROUTG`: 49).
-- Safe for production: only modifies designated fields in specific operation types.
+Files are read and written with **UTF-8** (no BOM). That is appropriate for **ASCII / UTF-8** NC and typical CAM exports. If a legacy file uses a **non-UTF-8 code page** (some older Windows-only pipelines), characters outside ASCII may **round-trip incorrectly** after a save. In doubt, work on a **copy**, use **backups**, and confirm in your CAM or editor.
 
-## JSON Mapping Format
+## Build and run
 
-Example:
+Prerequisites: **.NET 8 SDK**, **Windows** (WinForms).
 
-```json
-{
-  "9/16END": "T916",
-  "5MM": "T05",
-  "3MM": "T03"
-}
-```
-
-- Key = original tool token as found in file
-- Value = replacement token
-
-## Build and Run
-
-From project folder:
+From the project directory:
 
 ```powershell
 dotnet build
 dotnet run
 ```
 
-Publish single-file self-contained EXE:
+Release build:
+
+```powershell
+dotnet build -c Release
+```
+
+## Publish (optional single-file EXE)
 
 ```powershell
 dotnet publish -c Release -r win-x64 -p:PublishSingleFile=true -p:SelfContained=true
 ```
 
-Expected output path:
+Output (typical):
 
 - `bin\Release\net8.0-windows\win-x64\publish\CidToolRenamer.exe`
 
-## Process History / Handoff Notes
+## Assets
 
-### Prior Session (from exported log)
-1. Started from spec for a CID tool renamer with WinForms UI.
-2. Implemented base app with scanning, mapping grid, JSON load/save, apply, backup, dry-run, and status/progress.
-3. Updated parser to target `TOOLNAME=` entries.
+- `Resources\app.ico` - application icon (referenced by the project file).
+- `Resources\CidToolRenamer-icon.png` - source graphic if you need to regenerate the `.ico`.
 
-### This Session
-1. Expanded support to `.bpp` files using index-based strategy (BG=35, ROUTG=49).
-2. Updated CID parser to support both `ToolName=` and `Tool=` keywords.
-3. Updated UI title and confirmation messages to reflect dual support.
-4. Verified build and updated documentation.
+## Limitations
 
-## Known Gaps / Improvement Opportunities
-- Error reporting is modal-only; could be improved with exportable log file.
-- Processing is synchronous with `Application.DoEvents()`; could move to async/background worker for large batches.
+- Errors are shown in a **modal dialog** only; there is no exportable log file.
+- Processing uses the **UI thread** with `Application.DoEvents()` for progress; very large trees may feel sluggish.
+- G-code handling is **regex-based**, not a full ISO parser; unusual dialects or text inside comments can still surprise you - use dry run and verify output.
 
-## Suggested Next Agent Tasks
-1. Add small test corpus and automated parser tests.
-2. Add release notes section and versioning strategy.
+## Repo hygiene (if you use a parent workspace)
 
+If your disk layout has a sibling folder such as `_SmokeHarnessTmp` **outside** this project, **do not add it to the public repo**. This repo's `.gitignore` ignores a local `SmokeHarness\` folder **inside** the project if you create one.

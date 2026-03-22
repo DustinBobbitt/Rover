@@ -5,6 +5,9 @@
     <UseWindowsForms>true</UseWindowsForms>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <AssemblyTitle>Rover</AssemblyTitle>
+    <Product>Rover</Product>
+    <Description>Bulk tool remapping for CID, BPP, and common G-code files.</Description>
     <ApplicationIcon>Resources\app.ico</ApplicationIcon>
     <!-- Prevent SDK default globs from compiling helper/temp projects left under this folder -->
     <DefaultItemExcludes>$(DefaultItemExcludes);SmokeHarness\**\*;Tools\**\*</DefaultItemExcludes>

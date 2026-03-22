@@ -25,6 +25,19 @@ namespace CidToolRenamer
         // Match compact tool calls like T12 (common in NC/TAP/CNC).
         private static readonly Regex TCompactRegex = new(@"\b(T)(\d+)\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
+        // Length offset (G43 H...) and cutter comp (G41/G42 D...) - rewritten when digits match a mapping key (same as T).
+        private static readonly Regex HCompactRegex = new(@"\b(H)(\d+)\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        private static readonly Regex DCompactRegex = new(@"\b(D)(\d+)\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+        // H=/D= forms (some posts), same replacement contract as T=.
+        private static readonly Regex HEqualsRegex = new(@"\b(H\s*=\s*)(\d+)\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        private static readonly Regex DEqualsRegex = new(@"\b(D\s*=\s*)(\d+)\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+        // Fused G43H12 / G41D3 / G42D3 - no word boundary between the G-code and H/D, so compact \b(H) misses these.
+        private static readonly Regex G43HNoSpaceRegex = new(@"\b(G43)(H)(\d+)\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        private static readonly Regex G41DNoSpaceRegex = new(@"\b(G41)(D)(\d+)\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        private static readonly Regex G42DNoSpaceRegex = new(@"\b(G42)(D)(\d+)\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
         // Heuristic parsing for unknown/variant text formats.
         private static readonly Regex HeuristicToolNamedRegex = new(@"\b(?:TOOLNAME|TOOL)\s*[:=]\s*([A-Za-z0-9_./\-]{1,32})\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
         private static readonly Regex HeuristicToolNumberRegex = new(@"\bT\s*=?\s*(\d{1,4})\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
@@ -160,7 +173,7 @@ namespace CidToolRenamer
         {
             using var dialog = new FolderBrowserDialog
             {
-                Description = "Select root folder containing CID, BPP, or G-code files"
+                Description = "Select root folder (CID, BPP, and/or G-code files)"
             };
 
             if (Directory.Exists(txtRootFolder.Text))
@@ -243,7 +256,7 @@ namespace CidToolRenamer
                     {
                         MessageBox.Show(
                             this,
-                            "Thanks. Please share one representative file with the team so we can add support for this format in a future update.",
+                            "Thanks. Sharing a representative sample file can help improve support for this format in a future update.",
                             "Sample file requested",
                             MessageBoxButtons.OK,
                             MessageBoxIcon.Information);
@@ -403,9 +416,21 @@ namespace CidToolRenamer
                 return;
             }
 
+            bool gCodeEnabled = chkIsoFiles.Checked;
+            string machineSafety = gCodeEnabled
+                ? "\n\n" +
+                  "Machine safety: G-code rewriting can change T, H, and D together. If H or D no longer matches " +
+                  "your control's offset / wear tables, the program can use the wrong length offset or cutter comp. " +
+                  "That can move Z incorrectly at rapids - broken tools, ruined spoil boards or fixtures, or machine damage. " +
+                  "Use Dry Run and backups, verify in CAM or simulation, and prove out before cutting."
+                : string.Empty;
+
             var confirm = MessageBox.Show(this,
-                "This will process CID, BPP, and G-code files and apply tool replacements (unless Dry Run is checked). Continue?",
-                "Confirm",
+                "This will process selected file types and apply tool replacements (unless Dry Run is checked).\n\n" +
+                "G-code (when enabled): matching T, H, and D numbers are updated when they appear as keys in your mapping " +
+                "(including T=/H=/D=, compact T/H/D, and fused G43H / G41D / G42D where applicable)." +
+                machineSafety,
+                "Confirm apply",
                 MessageBoxButtons.YesNo,
                 MessageBoxIcon.Warning);
 
@@ -499,6 +524,15 @@ namespace CidToolRenamer
             {
                 string updated = TEqualsRegex.Replace(content, match => ReplaceGCodeToolMatch(match, mapping));
                 updated = TCompactRegex.Replace(updated, match => ReplaceGCodeToolMatch(match, mapping));
+                // Fused forms before compact H/D so we do not depend on a word boundary between G-code and letter.
+                updated = G43HNoSpaceRegex.Replace(updated, match => ReplaceGCodeFusedLetterMatch(match, mapping));
+                updated = G41DNoSpaceRegex.Replace(updated, match => ReplaceGCodeFusedLetterMatch(match, mapping));
+                updated = G42DNoSpaceRegex.Replace(updated, match => ReplaceGCodeFusedLetterMatch(match, mapping));
+                updated = HEqualsRegex.Replace(updated, match => ReplaceGCodeToolMatch(match, mapping));
+                updated = DEqualsRegex.Replace(updated, match => ReplaceGCodeToolMatch(match, mapping));
+                // Same mapping rule as T: only rewrite H/D when digits are an explicit key (typical T/H/D-aligned posts).
+                updated = HCompactRegex.Replace(updated, match => ReplaceGCodeToolMatch(match, mapping));
+                updated = DCompactRegex.Replace(updated, match => ReplaceGCodeToolMatch(match, mapping));
                 return updated;
             }
             return content;
@@ -518,6 +552,26 @@ namespace CidToolRenamer
             if (mapping.TryGetValue(prefix + oldTool, out mapped))
             {
                 return prefix + PreserveNumericPadding(oldTool, mapped);
+            }
+
+            return match.Value;
+        }
+
+        /// <summary>Handles G43H12 / G41D3 style tokens: group 1 = G-code, 2 = H or D, 3 = digits.</summary>
+        private static string ReplaceGCodeFusedLetterMatch(Match match, Dictionary<string, string> mapping)
+        {
+            string gWord = match.Groups[1].Value;
+            string letter = match.Groups[2].Value;
+            string oldDigits = match.Groups[3].Value;
+
+            if (mapping.TryGetValue(oldDigits, out var mapped))
+            {
+                return gWord + letter + PreserveNumericPadding(oldDigits, mapped);
+            }
+
+            if (mapping.TryGetValue(letter + oldDigits, out mapped))
+            {
+                return gWord + letter + PreserveNumericPadding(oldDigits, mapped);
             }
 
             return match.Value;
@@ -672,7 +726,7 @@ namespace CidToolRenamer
                 AutoSize = false,
                 Location = new System.Drawing.Point(12, 12),
                 Size = new System.Drawing.Size(436, 52),
-                Text = "Parsing still could not identify tools.\r\nIf you can share a representative file, we can improve support in a future update."
+                Text = "Parsing still could not identify tools.\r\nIf you share a representative sample file, support for this format can improve in a future update."
             };
 
             var chkShare = new CheckBox
@@ -712,19 +766,23 @@ namespace CidToolRenamer
             var fields = SplitBppFields(payload);
             if (fields.Count <= targetIndex) return line;
 
-            string toolValue = fields[targetIndex].Trim().Trim('"');
-            if (mapping.TryGetValue(toolValue, out string? newValue))
+            string originalField = fields[targetIndex];
+            string trimmed = originalField.Trim();
+            string toolValue = trimmed.Trim('"');
+            if (string.IsNullOrEmpty(toolValue) || !mapping.TryGetValue(toolValue, out string? newValue))
             {
-                fields[targetIndex] = $" \"{newValue}\""; // Preserve space before quote if it was there, or just add one for readability
-                // But let's be more precise and preserve the exact spacing if possible
-                string originalField = fields[targetIndex];
-                string leadingSpace = originalField.Substring(0, originalField.Length - originalField.TrimStart().Length);
-                fields[targetIndex] = $"{leadingSpace}\"{newValue}\"";
-                
-                return prefix + string.Join(",", fields);
+                return line;
             }
 
-            return line;
+            string leadingSpace = originalField.Substring(0, originalField.Length - originalField.TrimStart().Length);
+            string trailingSpace = originalField.Substring(originalField.TrimEnd().Length);
+            bool quoted = trimmed.Length >= 2 && trimmed.StartsWith('"') && trimmed.EndsWith('"');
+
+            fields[targetIndex] = quoted
+                ? $"{leadingSpace}\"{newValue}\"{trailingSpace}"
+                : $"{leadingSpace}{newValue}{trailingSpace}";
+
+            return prefix + string.Join(",", fields);
         }
 
         private int GetBppToolIndex(string line)

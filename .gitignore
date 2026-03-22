@@ -1,3 +1,22 @@
 bin/
 obj/
 .vs/
+
+# Visual Studio / Rider / VS Code (local)
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+*.DotSettings.user
+.idea/
+.vscode/
+
+# Test / coverage
+TestResults/
+[Tt]est[Rr]esults/
+
+# Local harness or scratch trees (never publish)
+SmokeHarness/
+
+# Local CAM backups (do not commit)
+Rover backup CID files/
