@@ -1,4 +1,4 @@
-namespace CidToolRenamer
+namespace Rover
 {
     public class ToolMappingEntry
     {

@@ -5,6 +5,9 @@
     <UseWindowsForms>true</UseWindowsForms>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <AssemblyName>Rover</AssemblyName>
+    <RootNamespace>Rover</RootNamespace>
+    <Company>Acor</Company>
     <AssemblyTitle>Rover</AssemblyTitle>
     <Product>Rover</Product>
     <Description>Bulk tool remapping for CID, BPP, and common G-code files.</Description>

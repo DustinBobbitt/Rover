@@ -2,7 +2,7 @@ using System.ComponentModel;
 using System.Drawing;
 using System.Windows.Forms;
 
-namespace CidToolRenamer
+namespace Rover
 {
     partial class MainForm
     {

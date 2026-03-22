@@ -1,7 +1,7 @@
 using System;
 using System.Windows.Forms;
 
-namespace CidToolRenamer
+namespace Rover
 {
     internal static class Program
     {

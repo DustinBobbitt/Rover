@@ -2,8 +2,6 @@
 
 Windows desktop utility for **bulk tool remapping** in **Biesse-style `.cid` / `.bpp`** files and common **G-code** outputs. Scan a folder, edit an old-to-new mapping table, then apply (optionally with **dry run** and **`.bak` backups**).
 
-**Repository note:** The .NET project and build output use the assembly name `CidToolRenamer` (executable `CidToolRenamer.exe`). **Rover** is the product name used here and in the app window title.
-
 ## Who it is for
 
 - Shops moving programs between setups or posts where **tool names or T/H/D numbers** need to line up with a new convention.
@@ -59,12 +57,12 @@ dotnet publish -c Release -r win-x64 -p:PublishSingleFile=true -p:SelfContained=
 
 Output (typical):
 
-- `bin\Release\net8.0-windows\win-x64\publish\CidToolRenamer.exe`
+- `bin\Release\net8.0-windows\win-x64\publish\Rover.exe`
 
 ## Assets
 
 - `Resources\app.ico` - application icon (referenced by the project file).
-- `Resources\CidToolRenamer-icon.png` - source graphic if you need to regenerate the `.ico`.
+- `Resources\Rover-icon.png` - source graphic if you need to regenerate the `.ico`.
 
 ## Limitations
 
