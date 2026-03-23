@@ -366,7 +366,7 @@ namespace Rover
             {
                 var options = new JsonSerializerOptions { WriteIndented = true };
                 var json = JsonSerializer.Serialize(map, options);
-                File.WriteAllText(dialog.FileName, json, Encoding.UTF8);
+                File.WriteAllText(dialog.FileName, json, Utf8NoBom);
                 lblStatus.Text = "Mapping saved.";
             }
             catch (Exception ex)
@@ -390,7 +390,7 @@ namespace Rover
 
             try
             {
-                var json = File.ReadAllText(dialog.FileName, Encoding.UTF8);
+                var json = File.ReadAllText(dialog.FileName, Utf8NoBom);
                 var map = JsonSerializer.Deserialize<Dictionary<string, string>>(json) ?? new Dictionary<string, string>();
                 MergeMapping(map);
                 gridTools.Refresh();
@@ -888,11 +888,13 @@ namespace Rover
             }
         }
 
+        private static readonly Encoding Utf8NoBom = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
+
         private string? TryReadText(string file)
         {
             try
             {
-                return File.ReadAllText(file, Encoding.UTF8);
+                return File.ReadAllText(file, Utf8NoBom);
             }
             catch (Exception ex)
             {
@@ -905,7 +907,7 @@ namespace Rover
         {
             try
             {
-                File.WriteAllText(file, content, Encoding.UTF8);
+                File.WriteAllText(file, content, Utf8NoBom);
             }
             catch (Exception ex)
             {
